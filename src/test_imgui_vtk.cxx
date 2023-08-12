@@ -17,6 +17,7 @@
 #include "vtkRenderer.h"
 #include "vtkRenderWindow.h"
 #include "vtkRenderWindowInteractor.h"
+#include <vtkProperty.h>
 
 #ifdef ADOBE_IMGUI_SPECTRUM
 #include "imgui_spectrum.h"
@@ -53,6 +54,8 @@ int main(int argc, char* argv[])
 
   vtkNew<vtkActor> actor;
   actor->SetMapper(mapper);
+  actor->GetProperty()->SetOpacity(0.3);
+
 
   // Add the actors to the scene
   renderer->AddActor(actor);
@@ -60,6 +63,17 @@ int main(int argc, char* argv[])
   // Start rendering app
   renderer->SetBackground(0.2, 0.3, 0.4);
   renderWindow->Render();
+  // enable depth peeling
+  renderer->SetUseDepthPeeling(1);
+  renderer->SetMaximumNumberOfPeels(10);
+  renderer->SetOcclusionRatio(0.1);
+  renderWindow->SetAlphaBitPlanes(1);
+  renderWindow->SetMultiSamples(0);
+  // renderer->UseFXAAOn();
+  // set gradient color...
+  renderer->GradientBackgroundOn();
+  renderer->SetBackground(0.6, 0.8, 1.0); // Light sky blue
+  renderer->SetBackground2(0.8, 0.9, 1.0); // Darker sky blue
 
   /// Change to your code begins here. ///
   // Initialize an overlay with DearImgui elements.
@@ -74,6 +88,8 @@ int main(int argc, char* argv[])
 
   vtkNew<vtkCameraOrientationWidget> camManipulator;
   camManipulator->SetParentRenderer(renderer);
+  camManipulator->AnimateOn();
+  camManipulator->SetAnimatorTotalFrames(60);
   camManipulator->On();
   auto rep = vtkCameraOrientationRepresentation::SafeDownCast(camManipulator->GetRepresentation());
   rep->AnchorToLowerRight();
@@ -81,7 +97,7 @@ int main(int argc, char* argv[])
   // Start event loop
   renderWindow->SetSize(1920, 1000);
   vtkInteractorStyleSwitch::SafeDownCast(iren->GetInteractorStyle())->SetCurrentStyleToTrackballCamera();
-  iren->EnableRenderOff();
+  // iren->EnableRenderOff();
   iren->Start();
 
   return 0;
@@ -368,7 +384,8 @@ static void SetupUI(vtkDearImGuiInjector* overlay)
       io.Fonts->AddFontFromMemoryCompressedBase85TTF(Karla_Regular_compressed_data_base85, 16);
       io.Fonts->AddFontDefault();
 #else
-      ImGui::Spectrum::LoadFont(18.0f);
+      // get framebuffer size
+      ImGui::Spectrum::LoadFont(32.0f);
       ImGui::Spectrum::StyleColorsSpectrum();
 #endif
       auto& style = ImGui::GetStyle();
@@ -393,62 +410,75 @@ static void DrawUI(vtkDearImGuiInjector* overlay)
                           void* clientData, void* vtkNotUsed(callData))
   {
     vtkDearImGuiInjector* overlay_ = reinterpret_cast<vtkDearImGuiInjector*>(caller);
+    
+    static bool windowIsOpen = true; 
+
+  if (ImGui::BeginMainMenuBar())
+  {
+    if (ImGui::BeginMenu("Tools"))
+    {
+      ImGui::MenuItem("VTK Info", NULL, &windowIsOpen);
+      ImGui::EndMenu();
+    }
+  }
 
     ImGui::SetNextWindowBgAlpha(0.5);
     ImGui::SetNextWindowPos(ImVec2(5, 25), ImGuiCond_Once);
     ImGui::SetNextWindowSize(ImVec2(450, 550), ImGuiCond_Once);
-    ImGui::Begin("VTK");
-    if (ImGui::CollapsingHeader("vtkRenderWindow", ImGuiTreeNodeFlags_DefaultOpen))
-    {
-      auto rw = overlay_->Interactor->GetRenderWindow();
-      ImGui::Text("MTime: %ld", rw->GetMTime());
-      ImGui::Text("Name: %s", rw->GetClassName());
-      if (ImGui::TreeNode("Capabilities"))
+    if(windowIsOpen) {
+      ImGui::Begin("VTK", &windowIsOpen);
+      if (ImGui::CollapsingHeader("vtkRenderWindow", ImGuiTreeNodeFlags_DefaultOpen))
       {
-        ImGui::TextWrapped("OpenGL: %s", rw->ReportCapabilities());
-        ImGui::TreePop();
-      }
-    }
-    if (ImGui::CollapsingHeader("vtkRenderWindowInteractor", ImGuiTreeNodeFlags_DefaultOpen))
-    {
-      auto& iren = overlay_->Interactor;
-      ImGui::Text("MTime: %ld", iren->GetMTime());
-      ImGui::Text("Name: %s", iren->GetClassName());
-      if (ImGui::TreeNode("Style"))
-      {
-        auto styleBase = iren->GetInteractorStyle();
-        vtkInteractorObserver* iStyle = nullptr;
-        if (styleBase->IsA("vtkInteractorStyleSwitchBase"))
+        auto rw = overlay_->Interactor->GetRenderWindow();
+        ImGui::Text("MTime: %ld", rw->GetMTime());
+        ImGui::Text("Name: %s", rw->GetClassName());
+        if (ImGui::TreeNode("Capabilities"))
         {
-          iStyle = vtkInteractorStyleSwitch::SafeDownCast(styleBase)->GetCurrentStyle();
+          ImGui::TextWrapped("OpenGL: %s", rw->ReportCapabilities());
+          ImGui::TreePop();
         }
-        else
+      }
+      if (ImGui::CollapsingHeader("vtkRenderWindowInteractor", ImGuiTreeNodeFlags_DefaultOpen))
+      {
+        auto& iren = overlay_->Interactor;
+        ImGui::Text("MTime: %ld", iren->GetMTime());
+        ImGui::Text("Name: %s", iren->GetClassName());
+        if (ImGui::TreeNode("Style"))
         {
-          iStyle = styleBase;
+          auto styleBase = iren->GetInteractorStyle();
+          vtkInteractorObserver* iStyle = nullptr;
+          if (styleBase->IsA("vtkInteractorStyleSwitchBase"))
+          {
+            iStyle = vtkInteractorStyleSwitch::SafeDownCast(styleBase)->GetCurrentStyle();
+          }
+          else
+          {
+            iStyle = styleBase;
+          }
+          ImGui::Text("MTime: %ld", iStyle->GetMTime());
+          ImGui::Text("Name: %s", iStyle->GetClassName());
+          ImGui::TreePop();
         }
-        ImGui::Text("MTime: %ld", iStyle->GetMTime());
-        ImGui::Text("Name: %s", iStyle->GetClassName());
-        ImGui::TreePop();
+        if (ImGui::TreeNode("Mouse"))
+        {
+          int* xy = iren->GetEventPosition();
+          ImGui::Text("X: %d", xy[0]);
+          ImGui::Text("Y: %d", xy[1]);
+          ImGui::TreePop();
+        }
+        if (ImGui::TreeNode("Keyboard"))
+        {
+          ImGui::Text("KeySym: %s", iren->GetKeySym());
+          ImGui::SameLine();
+          HelpMarker("VTK does not flush KeySym per frame.");
+          ImGui::Text("KeyCode: %c", iren->GetKeyCode());
+          ImGui::Text("Mods: %s %s %s", (iren->GetAltKey() ? "ALT" : " "),
+            (iren->GetControlKey() ? "CTRL" : " "), (iren->GetShiftKey() ? "SHIFT" : " "));
+          ImGui::TreePop();
+        }
       }
-      if (ImGui::TreeNode("Mouse"))
-      {
-        int* xy = iren->GetEventPosition();
-        ImGui::Text("X: %d", xy[0]);
-        ImGui::Text("Y: %d", xy[1]);
-        ImGui::TreePop();
-      }
-      if (ImGui::TreeNode("Keyboard"))
-      {
-        ImGui::Text("KeySym: %s", iren->GetKeySym());
-        ImGui::SameLine();
-        HelpMarker("VTK does not flush KeySym per frame.");
-        ImGui::Text("KeyCode: %c", iren->GetKeyCode());
-        ImGui::Text("Mods: %s %s %s", (iren->GetAltKey() ? "ALT" : " "),
-          (iren->GetControlKey() ? "CTRL" : " "), (iren->GetShiftKey() ? "SHIFT" : " "));
-        ImGui::TreePop();
-      }
-    }
-    ImGui::End();
+      ImGui::End();
+    }// if (windowIsOpen)
   };
   uiDraw->SetCallback(uiDrawFunction);
   overlay->AddObserver(vtkDearImGuiInjector::ImGuiDrawEvent, uiDraw);

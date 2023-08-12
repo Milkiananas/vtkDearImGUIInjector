@@ -472,11 +472,11 @@ void mainLoopCallback(void* arg)
   vtkRenderWindowInteractor* interactor = self->Interactor;
   vtkRenderWindow* renWin = interactor->GetRenderWindow();
 
-  self->InstallEventCallback(interactor);
+  // self->InstallEventCallback(interactor);
   interactor->ProcessEvents();
-  self->UninstallEventCallback();
-  if (!interactor->GetDone())
-    renWin->Render();
+  // self->UninstallEventCallback();
+  // if (!interactor->GetDone())
+  //   renWin->Render();
 }
 
 #ifdef __EMSCRIPTEN__
@@ -497,6 +497,7 @@ void vtkDearImGuiInjector::PumpEv(vtkObject* caller, unsigned long eid, void* ca
   interactor->Enable();
   interactor->Initialize();
 
+  InstallEventCallback(interactor);
 #ifdef __EMSCRIPTEN__
   emscripten_set_resize_callback(
     EMSCRIPTEN_EVENT_TARGET_WINDOW, reinterpret_cast<void*>(interactor), 1, resizeCallback);
@@ -504,7 +505,8 @@ void vtkDearImGuiInjector::PumpEv(vtkObject* caller, unsigned long eid, void* ca
 #else
   while (!interactor->GetDone())
   {
-    mainLoopCallback(reinterpret_cast<void*>(this));
+    // mainLoopCallback(reinterpret_cast<void*>(this));
+    interactor->ProcessEvents();
   }
 #endif
 }
@@ -515,6 +517,22 @@ void vtkDearImGuiInjector::DispatchEv(
   // auto interactor = vtkRenderWindowInteractor::SafeDownCast(caller);
   auto iStyle = vtkInteractorStyle::SafeDownCast(caller);
   auto self = reinterpret_cast<vtkDearImGuiInjector*>(clientData);
+
+  // manage update timer
+  auto interactor = iStyle->GetInteractor();
+  auto renWin = interactor->GetRenderWindow();
+  auto createImGuiUpdateTimer = [&](){
+      self->UpdateMousePosAndButtons(interactor);
+      self->UpdateMouseCursor(renWin);
+      if(self->ImGuiForceUpdateTimer == -1) {
+        self->ImGuiForceUpdateTimer = iStyle->GetInteractor()->CreateRepeatingTimer(10); // 10ms is fast enough
+        self->ImGuiFrameCntsRemained = 5; // repeating 5 render calls is enough
+      }
+      else {
+        iStyle->GetInteractor()->ResetTimer(self->ImGuiForceUpdateTimer);
+        self->ImGuiFrameCntsRemained = 5;
+      }
+  };
 
   ImGuiIO& io = ImGui::GetIO();
   (void)io;
@@ -543,6 +561,7 @@ void vtkDearImGuiInjector::DispatchEv(
     case vtkCommand::LeftButtonPressEvent:
     {
       self->MouseJustPressed[ImGuiMouseButton_Left] = true;
+      createImGuiUpdateTimer();
       if (!io.WantCaptureMouse || (io.WantCaptureMouse && self->GrabMouse))
       {
         iStyle->OnLeftButtonDown();
@@ -552,6 +571,7 @@ void vtkDearImGuiInjector::DispatchEv(
     case vtkCommand::LeftButtonReleaseEvent:
     {
       self->MouseJustPressed[ImGuiMouseButton_Left] = false;
+      createImGuiUpdateTimer();
       if (!io.WantCaptureMouse || (io.WantCaptureMouse && self->GrabMouse))
       {
         iStyle->OnLeftButtonUp();
@@ -561,6 +581,7 @@ void vtkDearImGuiInjector::DispatchEv(
     case vtkCommand::LeftButtonDoubleClickEvent:
     {
       io.MouseDoubleClicked[ImGuiMouseButton_Left] = true;
+      createImGuiUpdateTimer();
       if (!io.WantCaptureMouse || (io.WantCaptureMouse && self->GrabMouse))
       {
         iStyle->OnLeftButtonDoubleClick();
@@ -570,6 +591,7 @@ void vtkDearImGuiInjector::DispatchEv(
     case vtkCommand::MiddleButtonPressEvent:
     {
       self->MouseJustPressed[ImGuiMouseButton_Middle] = true;
+      createImGuiUpdateTimer();
       if (!io.WantCaptureMouse || (io.WantCaptureMouse && self->GrabMouse))
       {
         iStyle->OnMiddleButtonDown();
@@ -579,6 +601,7 @@ void vtkDearImGuiInjector::DispatchEv(
     case vtkCommand::MiddleButtonReleaseEvent:
     {
       self->MouseJustPressed[ImGuiMouseButton_Middle] = false;
+      createImGuiUpdateTimer();
       if (!io.WantCaptureMouse || (io.WantCaptureMouse && self->GrabMouse))
       {
         iStyle->OnMiddleButtonUp();
@@ -588,6 +611,7 @@ void vtkDearImGuiInjector::DispatchEv(
     case vtkCommand::MiddleButtonDoubleClickEvent:
     {
       io.MouseDoubleClicked[ImGuiMouseButton_Middle] = true;
+      createImGuiUpdateTimer();
       if (!io.WantCaptureMouse || (io.WantCaptureMouse && self->GrabMouse))
       {
         iStyle->OnMiddleButtonDoubleClick();
@@ -597,6 +621,7 @@ void vtkDearImGuiInjector::DispatchEv(
     case vtkCommand::RightButtonPressEvent:
     {
       self->MouseJustPressed[ImGuiMouseButton_Right] = true;
+      createImGuiUpdateTimer();
       if (!io.WantCaptureMouse || (io.WantCaptureMouse && self->GrabMouse))
       {
         iStyle->OnRightButtonDown();
@@ -606,6 +631,7 @@ void vtkDearImGuiInjector::DispatchEv(
     case vtkCommand::RightButtonReleaseEvent:
     {
       self->MouseJustPressed[ImGuiMouseButton_Right] = false;
+      createImGuiUpdateTimer();
       if (!io.WantCaptureMouse || (io.WantCaptureMouse && self->GrabMouse))
       {
         iStyle->OnRightButtonUp();
@@ -615,6 +641,7 @@ void vtkDearImGuiInjector::DispatchEv(
     case vtkCommand::RightButtonDoubleClickEvent:
     {
       io.MouseDoubleClicked[ImGuiMouseButton_Right] = true;
+      createImGuiUpdateTimer();
       if (!io.WantCaptureMouse || (io.WantCaptureMouse && self->GrabMouse))
       {
         iStyle->OnRightButtonDoubleClick();
@@ -624,6 +651,7 @@ void vtkDearImGuiInjector::DispatchEv(
     case vtkCommand::MouseWheelBackwardEvent:
     {
       io.MouseWheel = -1;
+      createImGuiUpdateTimer();
       if (!io.WantCaptureMouse || (io.WantCaptureMouse && self->GrabMouse))
       {
         iStyle->OnMouseWheelBackward();
@@ -633,6 +661,7 @@ void vtkDearImGuiInjector::DispatchEv(
     case vtkCommand::MouseWheelForwardEvent:
     {
       io.MouseWheel = 1;
+      createImGuiUpdateTimer();
       if (!io.WantCaptureMouse || (io.WantCaptureMouse && self->GrabMouse))
       {
         iStyle->OnMouseWheelForward();
@@ -642,6 +671,7 @@ void vtkDearImGuiInjector::DispatchEv(
     case vtkCommand::MouseWheelLeftEvent:
     {
       io.MouseWheelH = 1;
+      createImGuiUpdateTimer();
       if (!io.WantCaptureMouse || (io.WantCaptureMouse && self->GrabMouse))
       {
         iStyle->OnMouseWheelLeft();
@@ -651,6 +681,7 @@ void vtkDearImGuiInjector::DispatchEv(
     case vtkCommand::MouseWheelRightEvent:
     {
       io.MouseWheelH = -1;
+      createImGuiUpdateTimer();
       if (!io.WantCaptureMouse || (io.WantCaptureMouse && self->GrabMouse))
       {
         iStyle->OnMouseWheelRight();
@@ -670,6 +701,11 @@ void vtkDearImGuiInjector::DispatchEv(
     case vtkCommand::TimerEvent:
     {
       iStyle->OnTimer();
+      renWin->Render();
+      if(--(self->ImGuiFrameCntsRemained) == 0) {
+        interactor->DestroyTimer(self->ImGuiForceUpdateTimer);
+        self->ImGuiForceUpdateTimer = -1;
+      }
       break;
     }
     case vtkCommand::CharEvent:

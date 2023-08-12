@@ -86,6 +86,9 @@ protected:
   bool ShowAppStyleEditor = false;
   bool ShowAppAbout = false;
 
+  int ImGuiForceUpdateTimer = -1;
+  int ImGuiFrameCntsRemained = 0;
+
 private:
   vtkDearImGuiInjector(const vtkDearImGuiInjector&) = delete;
   void operator=(const vtkDearImGuiInjector&) = delete;
